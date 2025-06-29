@@ -1,12 +1,10 @@
 #include <Arduino.h>
 
-//Sensor Pins
 #define Trig_Clean   7
 #define Echo_Clean   6
 #define Trig_Polish  5
 #define Echo_Polish  4
 
-//Relay Pins
 #define Relay_Duster   8   
 #define Relay_Buffer   9   
 #define Relay_Sprayer  10  
@@ -16,15 +14,14 @@
 #define Time_Limit    20000
 
 #define Relay_Action_Low
-#ifndef Relay_Action_Low
-  #define Relay_On  HIGH
-  #define Relay_Off LOW
-#else
+#ifdef Relay_Action_Low
   #define Relay_On  LOW
   #define Relay_Off HIGH
+#else
+  #define Relay_On  HIGH
+  #define Relay_Off LOW
 #endif
 
-//Variables
 bool dusterRunning = false;
 int count = 0;
 
@@ -32,7 +29,7 @@ enum PolishPhase { idle, spraying, buffing };
 PolishPhase polishStatus = idle;
 unsigned long sprayStartTime = 0;
 
-//read distance
+//read distance from sensor
 float readRange(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
@@ -50,19 +47,19 @@ void initializeSystem() {
   pinMode(Trig_Polish, OUTPUT);
   pinMode(Echo_Polish, INPUT);
 
-  for(int i=8; i<10; i++){
-    pinMode(i, OUTPUT);
-  }
+  pinMode(Relay_Duster, OUTPUT);
+  pinMode(Relay_Buffer, OUTPUT);
+  pinMode(Relay_Sprayer, OUTPUT);
 
   digitalWrite(Relay_Duster, Relay_Off);
   digitalWrite(Relay_Buffer, Relay_Off);
   digitalWrite(Relay_Sprayer, Relay_Off);
 
   Serial.begin(9600);
-  Serial.println("Shoe Robot Initialization succes!");
+  Serial.println("success!");
 }
 
-//cleaning control motor
+//control cleaning
 void controlDuster(float range) {
   switch (dusterRunning) {
     case false:
@@ -71,8 +68,8 @@ void controlDuster(float range) {
           digitalWrite(Relay_Duster, Relay_On);
           dusterRunning = true;
           count++;
-          Serial.print("Duster ON Tokens: ");
-          Serial.print("Count: ");
+          Serial.print("Duster working");
+          Serial.print("count: ");
           Serial.println(count);
           break;
       }
@@ -83,71 +80,55 @@ void controlDuster(float range) {
         case true:
           digitalWrite(Relay_Duster, Relay_Off);
           dusterRunning = false;
-          Serial.println("Duster OFF");
+          Serial.println("Duster Off");
           break;
       }
       break;
   }
 }
 
-//polishing control
+//control polishing
 void controlBuffer(float range) {
   switch (polishStatus) {
     case idle:
-      switch ((range > Range_Min && range <= Range_Max)) {
-        case true:
-          switch (count > 0) {
-            case true:
-              digitalWrite(Relay_Sprayer, Relay_On);
-              sprayStartTime = millis();
-              polishStatus = spraying;
-              count--;
-              Serial.print("Spraying Started ");
-              Serial.print("Count: ");
-              Serial.println(count);
-              break;
-
-            case false:
-              Serial.println("Buffer Locked");
-              break;
-          }
-          break;
+      if (range > Range_Min && range <= Range_Max) {
+        if (count > 0) {
+          digitalWrite(Relay_Sprayer, Relay_On);
+          sprayStartTime = millis();
+          polishStatus = spraying;
+          count--;
+          Serial.print("Spraying Started");
+          Serial.print("count: ");
+          Serial.println(count);
+        } else {
+          Serial.println("Buffer Locked");
+        }
       }
       break;
 
     case spraying:
-      switch ((millis() - sprayStartTime >= 5000)) {
-        case true:
-          digitalWrite(Relay_Sprayer, Relay_Off);
-          digitalWrite(Relay_Buffer, Relay_On);
-          polishStatus = buffing;
-          Serial.println("Spray Done Buffer ON");
-          Serial.println("Buffer ON");
-          break;
+      if (millis() - sprayStartTime >= 5000) {
+        digitalWrite(Relay_Sprayer, Relay_Off);
+        digitalWrite(Relay_Buffer, Relay_On);
+        polishStatus = buffing;
+        Serial.println("Spray Done");//buffer on
       }
       break;
 
     case buffing:
-      switch ((range <= Range_Min || range > Range_Max)) {
-        case true:
-          digitalWrite(Relay_Buffer, Relay_Off);
-          polishStatus = idle;
-          Serial.println("Buffer OFF");
-          break;
+      if (range <= Range_Min || range > Range_Max) {
+        digitalWrite(Relay_Buffer, Relay_Off);
+        polishStatus = idle;
+        Serial.println("Buffer Off");
       }
       break;
   }
 
-  switch ((range <= Range_Min || range > Range_Max)) {
-    case true:
-      switch (polishStatus) {
-        case spraying:
-          digitalWrite(Relay_Sprayer, Relay_Off);
-          polishStatus = idle;
-          Serial.println("Reset");
-          break;
-      }
-      break;
+  //if shoe removed too early reset spray 
+  if ((range <= Range_Min || range > Range_Max) && polishStatus == spraying) {
+    digitalWrite(Relay_Sprayer, Relay_Off);
+    polishStatus = idle;
+    Serial.println("reset");
   }
 }
 
