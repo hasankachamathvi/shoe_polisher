@@ -1,4 +1,4 @@
-👞 SMART SHOE POLISHER
+# SMART SHOE POLISHER 👞
 
 IoT / Robotics-Based Automated Shoe Cleaning & Polishing System
 
